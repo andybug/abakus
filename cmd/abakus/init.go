@@ -21,11 +21,9 @@
 package main
 
 import (
-	//"fmt"
 	"os"
-	"path/filepath"
 
-	"github.com/boltdb/bolt"
+	"github.com/andybug/abakus/pkg/repo"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -45,48 +43,16 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cwd, _ := os.Getwd()
-		home := filepath.Join(cwd, ".abakus")
-		objects := filepath.Join(home, "objects")
-
-		if _, err := os.Stat(home); err == nil {
-			log.WithFields(log.Fields{
-				"home": home,
-			}).Fatal("Abakus repository already exists")
-		}
 
 		log.WithFields(log.Fields{
-			"home": home,
+			"root": cwd,
 		}).Info("Initializing abakus repository")
 
-		createDir(home)
-		createDir(objects)
-
-		createSnapshotDb(home)
-	},
-}
-
-func createDir(path string) {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		log.WithFields(log.Fields{"dir": path}).Debug("Creating directory")
-		err := os.Mkdir(path, 0755)
+		_, err := repo.Create(cwd)
 		if err != nil {
-			log.Fatal(err)
+			log.WithFields(log.Fields{
+				"root": cwd,
+			}).Fatalf("Failed to create repo: %s", err)
 		}
-	}
-}
-
-func createSnapshotDb(home string) {
-	dbpath := filepath.Join(home, "snapshots.db")
-
-	db, err := bolt.Open(dbpath, 0664, nil)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"database": dbpath,
-		}).Fatal("Failed to create snapshots db")
-	}
-	db.Close()
-
-	log.WithFields(log.Fields{
-		"database": dbpath,
-	}).Debug("Created snapshot db")
+	},
 }
