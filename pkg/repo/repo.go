@@ -57,6 +57,33 @@ func GetSnapshotsDbPath(root string) (snapshots_db string) {
 	return
 }
 
+// FindRoot find the root of the repo given a path within the repo
+// Returns the absolute path to the root if found
+// Otherwise returns an empty string and an error
+// In short, it checks if the current directory has an abakus dir,
+// if not, go up one dir and try again until we reach /
+func FindRoot(fromPath string) (string, error) {
+	// convert given path to absolute
+	absFromPath, err := filepath.Abs(fromPath)
+	if err != nil {
+		return "", err
+	}
+
+	// check if we've reached the top of the filesystem
+	if absFromPath == "/" {
+		return "", errors.New("No abakus repo found")
+	}
+
+	// check if the home directory exists and return if it does
+	homeDir := filepath.Join(absFromPath, HOME_DIR)
+	if _, err := os.Stat(homeDir); err == nil {
+		return absFromPath, nil
+	}
+
+	// go up a directory and try again
+	return FindRoot(filepath.Join(absFromPath, ".."))
+}
+
 // Create makes a new abakus repo in root/HOME_DIR
 // Returns the path to home directory and an error (or nil)
 func Create(root string) (string, error) {

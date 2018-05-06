@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,6 +52,27 @@ func TestGetSnapshotsDbPath(t *testing.T) {
 
 	snapshotDb := GetSnapshotsDbPath(root)
 	assert.Equal(t, expected, snapshotDb)
+}
+
+func TestFindRoot(t *testing.T) {
+	dir1, _ := ioutil.TempDir("", "TestFindRootSuccess")
+	defer os.RemoveAll(dir1)
+
+	os.Mkdir(filepath.Join(dir1, HOME_DIR), 0755)
+	os.Mkdir(filepath.Join(dir1, "a"), 0755)
+	os.Mkdir(filepath.Join(dir1, "a", "b"), 0755)
+	os.Mkdir(filepath.Join(dir1, "a", "b", "c"), 0755)
+
+	root, err := FindRoot(filepath.Join(dir1, "a", "b", "c"))
+	assert.Equal(t, dir1, root)
+	assert.Nil(t, err)
+
+	dir2, _ := ioutil.TempDir("", "TestFindRootFailure")
+	defer os.RemoveAll(dir2)
+
+	root2, err2 := FindRoot(dir2)
+	assert.Equal(t, "", root2)
+	assert.NotNil(t, err2)
 }
 
 func TestCreateSuccess(t *testing.T) {
