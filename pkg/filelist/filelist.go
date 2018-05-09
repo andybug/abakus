@@ -69,7 +69,6 @@ func New() *FileList {
 // NewFromRoot creates a FileList that includes all of the non-explicitly ignored
 // files under the root of the repository
 func NewFromRoot(root string) (*FileList, error) {
-	// make sure root is absolute and valid
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -78,12 +77,9 @@ func NewFromRoot(root string) (*FileList, error) {
 	// create an exclusion rule for the home dir
 	ignoreHome := newExcludeRules(root)
 	ignoreHome.add(fmt.Sprintf("/%s", repo.HOME_DIR))
-
-	// create the exclusion stack and add the home dir rule
 	esr := newExcludeRulesStack()
 	esr.push(ignoreHome)
 
-	// create the FileList and add all files under root
 	fl := New()
 	fl.addTree(root, root, esr)
 
@@ -101,24 +97,18 @@ func (fl *FileList) Add(relPath string, metadata *FileMetadata) {
 // addTree will use the stack to keep track of what exclusions apply
 // to different directories as it walks the file system
 func (fl *FileList) addTree(root string, dir string, stack *excludeRulesStack) error {
-	// load the exclusion rules for this directory and add them
-	// to the exclude stack
 	rules, err := readRules(dir)
 	if err != nil {
 		return err
 	}
 	stack.push(rules)
-
-	// pop the rules off the stack when we return
 	defer stack.pop()
 
-	// list the files
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return err
 	}
 
-	// iterate over files:
 	for _, file := range files {
 		absFilePath := filepath.Join(dir, file.Name())
 		relFilePath, _ := filepath.Rel(root, absFilePath)
@@ -129,21 +119,17 @@ func (fl *FileList) addTree(root string, dir string, stack *excludeRulesStack) e
 			continue
 		}
 
-		// if directory, descend
 		if file.IsDir() {
 			err = fl.addTree(root, absFilePath, stack)
 			if err != nil {
 				return err
 			}
 		} else {
-			// otherwise, it is a regular file
-			// get its hash
 			hash, err := hashFile(absFilePath)
 			if err != nil {
 				return err
 			}
 
-			// build metadata object
 			metadata := FileMetadata{
 				Hash:    hash,
 				Size:    uint64(file.Size()),
@@ -151,7 +137,6 @@ func (fl *FileList) addTree(root string, dir string, stack *excludeRulesStack) e
 				ModTime: uint64(file.ModTime().Unix()),
 			}
 
-			// map file path to metadata
 			fl.Add(relFilePath, &metadata)
 		}
 	}
@@ -161,20 +146,17 @@ func (fl *FileList) addTree(root string, dir string, stack *excludeRulesStack) e
 
 // hashFile returns the blake2b hash of a file on disk
 func hashFile(path string) ([]byte, error) {
-	// create steam to file
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
-	// write all data from file to hasher
 	b2b, _ := blake2b.New256(nil)
 	if _, err = io.Copy(b2b, f); err != nil {
 		return nil, err
 	}
 
-	// return allocated array
 	out := b2b.Sum(nil)
 	return out, nil
 }
@@ -191,13 +173,9 @@ type ignoreFile struct {
 // if there is an abakus ignore file, it is read and the rules added
 // if not, an empty rule object is returned
 func readRules(dir string) (*excludeRules, error) {
-	// create empty exclude rules
 	rules := newExcludeRules(dir)
-
-	// build path to ignore file for this directory
 	ignoreFilePath := filepath.Join(dir, IGNORE_FILE)
 
-	// try to open ignore file
 	file, err := os.Open(ignoreFilePath)
 	defer file.Close()
 	if err != nil {
@@ -209,27 +187,23 @@ func readRules(dir string) (*excludeRules, error) {
 		return nil, err
 	}
 
-	// read the entire file
 	bytes, err := ioutil.ReadAll(file)
 	if err != nil {
 		return nil, err
 	}
 
-	// load into ignoreFile struct from bytes
 	f := ignoreFile{}
 	err = yaml.Unmarshal(bytes, &f)
 	if err != nil {
 		return nil, err
 	}
 
-	// check version of the ignore file
 	if f.Version != 1 {
 		errMsg := fmt.Sprintf("Ignore file version %u not supported: %s",
 			f.Version, ignoreFilePath)
 		return nil, errors.New(errMsg)
 	}
 
-	// add each exclude rule to object
 	for _, rule := range f.Excludes {
 		rules.add(rule)
 	}
@@ -237,11 +211,14 @@ func readRules(dir string) (*excludeRules, error) {
 	return rules, nil
 }
 
+// excludeRules defines the list of exclusion rules added at a path
+// in the tree (in the IGNORE_FILE for that dir)
 type excludeRules struct {
 	path  string
 	rules *sll.List
 }
 
+// newExcludeRules returns an empty excludeRules object
 func newExcludeRules(path string) *excludeRules {
 	return &excludeRules{
 		path:  path,
@@ -249,15 +226,21 @@ func newExcludeRules(path string) *excludeRules {
 	}
 }
 
+// add converts the given rule to a regex then adds it to the list
+// for this dir
 func (er *excludeRules) add(rule string) {
 	if rule[0] == '/' {
+		// only match file in this dir
 		rule = fmt.Sprintf("^%s$", filepath.Join(er.path, rule[1:]))
 	} else {
+		// match files in any dir under this point
 		rule = fmt.Sprintf("^.*/%s$", rule)
 	}
 	er.rules.Add(rule)
 }
 
+// exclude returns true if the given absolute path to a file matches
+// one of the rules (so should be dropped)
 func (er *excludeRules) exclude(fileName string) bool {
 	it := er.rules.Iterator()
 	for it.Next() {
@@ -271,24 +254,32 @@ func (er *excludeRules) exclude(fileName string) bool {
 	return false
 }
 
+// excludeRulesStack tracks the exclude rules for each dir
+// as it is visited. each dir should have rules pushed on
+// to the stack when entered and popped when left
 type excludeRulesStack struct {
 	stack *arraystack.Stack
 }
 
+// newExcludeRulesStack returns empty stack
 func newExcludeRulesStack() *excludeRulesStack {
 	return &excludeRulesStack{
 		stack: arraystack.New(),
 	}
 }
 
+// push adds the rules to the top of the stack
 func (ers *excludeRulesStack) push(rules *excludeRules) {
 	ers.stack.Push(rules)
 }
 
+// pop removes rules from the top of the stack
 func (ers *excludeRulesStack) pop() {
 	ers.stack.Pop()
 }
 
+// exclude checks the absolute path to the file against all of the
+// rules in the stack. returns true if the file should be excluded
 func (ers *excludeRulesStack) exclude(fileName string) bool {
 	it := ers.stack.Iterator()
 	for it.Next() {
