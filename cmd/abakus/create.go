@@ -22,25 +22,40 @@ package main
 
 import (
 	"fmt"
-	"os"
 
-	"github.com/andybug/abakus/pkg/repo"
+	"github.com/andybug/abakus/pkg/blob"
+	"github.com/andybug/abakus/pkg/filelist"
+	"github.com/andybug/abakus/pkg/snapshot"
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(createCmd)
 }
 
-var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize a new abakus repository in the current directory",
+var createCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a new snapshot",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
-		cwd, _ := os.Getwd()
-		_, err := repo.Create(cwd)
+		root := getRoot()
+
+		blobStore, err := blob.GetStore(root)
 		exitError(err)
 
-		fmt.Println("New abakus repository initialized")
+		snapshotStore, err := snapshot.GetStore(root)
+		exitError(err)
+		defer snapshotStore.Close()
+
+		fl, err := filelist.NewFromRoot(root)
+		exitError(err)
+
+		_, _, err = blobStore.AddFiles(fl)
+		exitError(err)
+
+		_, err = snapshotStore.CreateSnapshot(fl)
+		exitError(err)
+
+		fmt.Println("Snapshot created")
 	},
 }

@@ -18,7 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-
 package repo
 
 import (
@@ -32,12 +31,11 @@ import (
 // HOME_DIR is the name of the abakus repo directory from root
 const HOME_DIR string = ".abakus"
 
-// OBJECTS_DIR is the name of the objects directory inside HOME_DIR
-const OBJECTS_DIR string = "objects"
+// BLOBS_DIR is the name of the blobs directory inside HOME_DIR
+const BLOBS_DIR string = "blobs"
 
 // SNAPSHOTS_DB is the name of the local database in the home dir
 const SNAPSHOTS_DB string = "snapshots.db"
-
 
 // GetHomeDir returns the path to the home directory with root as the base
 func GetHomeDir(root string) (home string) {
@@ -45,9 +43,9 @@ func GetHomeDir(root string) (home string) {
 	return
 }
 
-// GetObjectsDir returns the path to the objects directory with root as the base
-func GetObjectsDir(root string) (objects string) {
-	objects = filepath.Join(root, HOME_DIR, OBJECTS_DIR)
+// GetBlobsDir returns the path to the blobs directory with root as the base
+func GetBlobsDir(root string) (blobs string) {
+	blobs = filepath.Join(root, HOME_DIR, BLOBS_DIR)
 	return
 }
 
@@ -88,7 +86,7 @@ func FindRoot(fromPath string) (string, error) {
 // Returns the path to home directory and an error (or nil)
 func Create(root string) (string, error) {
 	home := GetHomeDir(root)
-	objects := GetObjectsDir(root)
+	blobs := GetBlobsDir(root)
 
 	// check if the repo already exists
 	if _, err := os.Stat(home); err == nil {
@@ -102,7 +100,7 @@ func Create(root string) (string, error) {
 	}
 
 	// create objects directory
-	if err := createDir(objects); err != nil {
+	if err := createDir(blobs); err != nil {
 		return home, err
 	}
 

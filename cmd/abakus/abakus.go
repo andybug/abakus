@@ -30,14 +30,12 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "abakus",
 	Short: "Abakus is a git-like utility for backups to the cloud",
-	Long: `long1
-                long2
-                long3`,
+	Long:  ``,
 }
 
 func execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }

@@ -21,25 +21,16 @@
 package filelist
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"regexp"
 
 	"github.com/andybug/abakus/pkg/repo"
-	sll "github.com/emirpasic/gods/lists/singlylinkedlist"
 	"github.com/emirpasic/gods/maps/treemap"
-	"github.com/emirpasic/gods/stacks/arraystack"
 	"github.com/golang/crypto/blake2b"
-	"gopkg.in/yaml.v2"
 )
-
-// IGNORE_FILE is the name of the file that can be in each directory
-// where the user can specify what files to exclude
-const IGNORE_FILE = ".abakusignore"
 
 // FileList maps the relative paths of files (from the root) to a FileMetadata
 // structure that describes that file
@@ -53,10 +44,10 @@ type FileList struct {
 // Mode - octal unix mode
 // ModTime - unix time (seconds since epoch)
 type FileMetadata struct {
-	Hash    []byte
-	Size    uint64
-	Mode    uint32
-	ModTime uint64
+	Hash    []byte `json:"hash"`
+	Size    uint64 `json:"size"`
+	Mode    uint32 `json:"mode"`
+	ModTime uint64 `json:"-"`
 }
 
 // New creates an empty FileList
@@ -144,6 +135,54 @@ func (fl *FileList) addTree(root string, dir string, stack *excludeRulesStack) e
 	return nil
 }
 
+// MerkleRoot calculates the blake2b root hash of a tree
+// built from the filelist (like bitcoin). The MerkleRoot
+// function hashes each file path/content hash and adds them
+// to an array. This array represents the leaves in the
+// merkle tree. The array is passed to the merkleTree function
+// to calculate the merkle hash of the subtree.
+func (fl *FileList) MerkleRoot() []byte {
+	hasher, _ := blake2b.New256(nil)
+	var hashes [][]byte
+
+	it := fl.Files.Iterator()
+	for it.Next() {
+		path := it.Key().(string)
+		metadata := it.Value().(*FileMetadata)
+
+		hasher.Write([]byte(path))
+		hasher.Write(metadata.Hash)
+		sum := hasher.Sum(nil)
+		hasher.Reset()
+
+		hashes = append(hashes, sum)
+	}
+
+	return merkleTree(hashes)
+}
+
+// merkleTree recursively calculates the merkle hash of a subtree
+func merkleTree(hashes [][]byte) []byte {
+	if len(hashes) == 1 {
+		return hashes[0]
+	}
+	if len(hashes)%2 != 0 {
+		hashes = append(hashes, hashes[len(hashes)-1])
+	}
+
+	hasher, _ := blake2b.New256(nil)
+	var newHashes [][]byte
+
+	for i := 0; i < len(hashes); i += 2 {
+		hasher.Write(hashes[i])
+		hasher.Write(hashes[i+1])
+		sum := hasher.Sum(nil)
+		newHashes = append(newHashes, sum)
+	}
+
+	return merkleTree(newHashes)
+}
+
 // hashFile returns the blake2b hash of a file on disk
 func hashFile(path string) ([]byte, error) {
 	f, err := os.Open(path)
@@ -159,135 +198,4 @@ func hashFile(path string) ([]byte, error) {
 
 	out := b2b.Sum(nil)
 	return out, nil
-}
-
-// ignoreFile defines the abakus ignorefile format
-// version must be 1
-// excludes is a list of rules (like .gititgnore)
-type ignoreFile struct {
-	Version  uint32
-	Excludes []string
-}
-
-// readRules returns the exclude rules for a directory
-// if there is an abakus ignore file, it is read and the rules added
-// if not, an empty rule object is returned
-func readRules(dir string) (*excludeRules, error) {
-	rules := newExcludeRules(dir)
-	ignoreFilePath := filepath.Join(dir, IGNORE_FILE)
-
-	file, err := os.Open(ignoreFilePath)
-	defer file.Close()
-	if err != nil {
-		// if no abakus ignore file, return empty rules
-		if os.IsNotExist(err) {
-			return rules, nil
-		}
-		// otherwise, there's something wrong
-		return nil, err
-	}
-
-	bytes, err := ioutil.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-
-	f := ignoreFile{}
-	err = yaml.Unmarshal(bytes, &f)
-	if err != nil {
-		return nil, err
-	}
-
-	if f.Version != 1 {
-		errMsg := fmt.Sprintf("Ignore file version %u not supported: %s",
-			f.Version, ignoreFilePath)
-		return nil, errors.New(errMsg)
-	}
-
-	for _, rule := range f.Excludes {
-		rules.add(rule)
-	}
-
-	return rules, nil
-}
-
-// excludeRules defines the list of exclusion rules added at a path
-// in the tree (in the IGNORE_FILE for that dir)
-type excludeRules struct {
-	path  string
-	rules *sll.List
-}
-
-// newExcludeRules returns an empty excludeRules object
-func newExcludeRules(path string) *excludeRules {
-	return &excludeRules{
-		path:  path,
-		rules: sll.New(),
-	}
-}
-
-// add converts the given rule to a regex then adds it to the list
-// for this dir
-func (er *excludeRules) add(rule string) {
-	if rule[0] == '/' {
-		// only match file in this dir
-		rule = fmt.Sprintf("^%s$", filepath.Join(er.path, rule[1:]))
-	} else {
-		// match files in any dir under this point
-		rule = fmt.Sprintf("^.*/%s$", rule)
-	}
-	er.rules.Add(rule)
-}
-
-// exclude returns true if the given absolute path to a file matches
-// one of the rules (so should be dropped)
-func (er *excludeRules) exclude(fileName string) bool {
-	it := er.rules.Iterator()
-	for it.Next() {
-		rule := it.Value().(string)
-		matched, _ := regexp.MatchString(rule, fileName)
-		if matched {
-			return true
-		}
-	}
-
-	return false
-}
-
-// excludeRulesStack tracks the exclude rules for each dir
-// as it is visited. each dir should have rules pushed on
-// to the stack when entered and popped when left
-type excludeRulesStack struct {
-	stack *arraystack.Stack
-}
-
-// newExcludeRulesStack returns empty stack
-func newExcludeRulesStack() *excludeRulesStack {
-	return &excludeRulesStack{
-		stack: arraystack.New(),
-	}
-}
-
-// push adds the rules to the top of the stack
-func (ers *excludeRulesStack) push(rules *excludeRules) {
-	ers.stack.Push(rules)
-}
-
-// pop removes rules from the top of the stack
-func (ers *excludeRulesStack) pop() {
-	ers.stack.Pop()
-}
-
-// exclude checks the absolute path to the file against all of the
-// rules in the stack. returns true if the file should be excluded
-func (ers *excludeRulesStack) exclude(fileName string) bool {
-	it := ers.stack.Iterator()
-	for it.Next() {
-		rule := it.Value().(*excludeRules)
-		if rule.exclude(fileName) {
-			return true
-		}
-	}
-
-	return false
 }

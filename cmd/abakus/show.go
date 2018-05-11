@@ -21,26 +21,56 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"text/tabwriter"
 
-	"github.com/andybug/abakus/pkg/repo"
+	"github.com/andybug/abakus/pkg/filelist"
+	"github.com/andybug/abakus/pkg/snapshot"
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(showCmd)
 }
 
-var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize a new abakus repository in the current directory",
+var showCmd = &cobra.Command{
+	Use:   "show",
+	Short: "Show files in a snapshot",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
-		cwd, _ := os.Getwd()
-		_, err := repo.Create(cwd)
+		root := getRoot()
+
+		snapshotStore, err := snapshot.GetStore(root)
+		exitError(err)
+		defer snapshotStore.Close()
+
+		if len(args) != 1 {
+			exitError(errors.New("status requires and id argument"))
+		}
+
+		id, err := strconv.ParseUint(args[0], 10, 64)
 		exitError(err)
 
-		fmt.Println("New abakus repository initialized")
+		snapshot, err := snapshotStore.GetSnapshot(id)
+		exitError(err)
+
+		w := tabwriter.NewWriter(os.Stdout, 4, 0, 4, ' ', tabwriter.TabIndent)
+		fmt.Fprintln(w, "PATH\tHASH\tSIZE\tMODE")
+
+		it := snapshot.Files.Files.Iterator()
+		for it.Next() {
+			metadata := it.Value().(*filelist.FileMetadata)
+			fmt.Fprintf(w, "%s\t%x\t%s\t%o\n",
+				it.Key().(string),
+				metadata.Hash,
+				humanize.Bytes(metadata.Size),
+				metadata.Mode,
+			)
+		}
+		w.Flush()
 	},
 }

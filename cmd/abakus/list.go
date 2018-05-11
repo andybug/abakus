@@ -23,24 +23,41 @@ package main
 import (
 	"fmt"
 	"os"
+	"text/tabwriter"
+	"time"
 
-	"github.com/andybug/abakus/pkg/repo"
+	"github.com/andybug/abakus/pkg/snapshot"
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(listCmd)
 }
 
-var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize a new abakus repository in the current directory",
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List snapshots in the repository",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
-		cwd, _ := os.Getwd()
-		_, err := repo.Create(cwd)
-		exitError(err)
+		root := getRoot()
 
-		fmt.Println("New abakus repository initialized")
+		store, err := snapshot.GetStore(root)
+		exitError(err)
+		defer store.Close()
+
+		w := tabwriter.NewWriter(os.Stdout, 4, 0, 4, ' ', tabwriter.TabIndent)
+		fmt.Fprintln(w, "ID\tTIME\tMERKLE\tFILES\tSIZE")
+
+		metadataList := store.GetAllMetadata()
+		for _, metadata := range metadataList {
+			fmt.Fprintf(w, "%d\t%s\t%x\t%s\t%s\n",
+				metadata.Id,
+				humanize.Time(time.Unix(metadata.Timestamp, 0)),
+				metadata.MerkleRoot[:4],
+				humanize.Comma(int64(metadata.FileCount)),
+				humanize.Bytes(metadata.Size))
+		}
+		w.Flush()
 	},
 }

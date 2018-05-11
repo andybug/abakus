@@ -18,29 +18,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package snapshot
 
 import (
-	"fmt"
-	"os"
-
-	"github.com/andybug/abakus/pkg/repo"
-	"github.com/spf13/cobra"
+	"github.com/andybug/abakus/pkg/filelist"
 )
 
-func init() {
-	rootCmd.AddCommand(initCmd)
+// SnapshotMetadata contains all of the metadata about a snapshot
+// It only lacks the file list. The snapshot store maintains a mapping
+// of all of the metadata.
+type SnapshotMetadata struct {
+	Id         uint64 `json:"-"`
+	Timestamp  int64  `json:"timestamp"`
+	MerkleRoot []byte `json:"merkle"`
+	FileCount  uint64 `json:"files"`
+	Size       uint64 `json:"size"`
 }
 
-var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize a new abakus repository in the current directory",
-	Long:  ``,
-	Run: func(cmd *cobra.Command, args []string) {
-		cwd, _ := os.Getwd()
-		_, err := repo.Create(cwd)
-		exitError(err)
-
-		fmt.Println("New abakus repository initialized")
-	},
+// Snapshot contains the metadata and data of a snapshot
+type Snapshot struct {
+	Metadata *SnapshotMetadata
+	Files    *filelist.FileList
 }

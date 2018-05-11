@@ -38,12 +38,12 @@ func TestGetHomeDir(t *testing.T) {
 	assert.Equal(t, expected, home)
 }
 
-func TestGetObjectsDir(t *testing.T) {
+func TestGetBlobsDir(t *testing.T) {
 	root := "a/b"
-	expected := "a/b/.abakus/objects"
+	expected := "a/b/.abakus/blobs"
 
-	objects := GetObjectsDir(root)
-	assert.Equal(t, expected, objects)
+	blobs := GetBlobsDir(root)
+	assert.Equal(t, expected, blobs)
 }
 
 func TestGetSnapshotsDbPath(t *testing.T) {
@@ -87,8 +87,8 @@ func TestCreateSuccess(t *testing.T) {
 	_, err = os.Stat(home)
 	assert.Nil(t, err)
 
-	objects := GetObjectsDir(dir)
-	_, err = os.Stat(objects)
+	blobs := GetBlobsDir(dir)
+	_, err = os.Stat(blobs)
 	assert.Nil(t, err)
 
 	snapshots_db := GetSnapshotsDbPath(dir)

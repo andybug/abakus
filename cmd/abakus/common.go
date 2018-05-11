@@ -25,22 +25,20 @@ import (
 	"os"
 
 	"github.com/andybug/abakus/pkg/repo"
-	"github.com/spf13/cobra"
 )
 
-func init() {
-	rootCmd.AddCommand(initCmd)
+func exitError(err error) {
+	if err == nil {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "error: %s\n", err)
+	os.Exit(1)
 }
 
-var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize a new abakus repository in the current directory",
-	Long:  ``,
-	Run: func(cmd *cobra.Command, args []string) {
-		cwd, _ := os.Getwd()
-		_, err := repo.Create(cwd)
-		exitError(err)
+func getRoot() string {
+	cwd, _ := os.Getwd()
+	root, err := repo.FindRoot(cwd)
+	exitError(err)
 
-		fmt.Println("New abakus repository initialized")
-	},
+	return root
 }
